@@ -1,0 +1,259 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - email: string (required, email format)
+    //   - displayName: string (required, max 100 chars)
+    //   - role: string (required, enum: admin, lecturer, student)
+    //   - regNumber: string (optional, max 50 chars)
+    //   - department: string (optional, max 100 chars)
+    //   - courses: list (optional, max 50 items)
+    //   - phoneNumber: string (optional, max 20 chars)
+    //   - deviceId: string (optional, max 128 chars)
+    //   - deviceAllowed: bool (optional)
+    //
+    // Collection: courses
+    // Fields:
+    //   - id: string (required)
+    //   - code: string (required, max 20 chars)
+    //   - title: string (required, max 200 chars)
+    //   - lecturerId: string (required, references users)
+    //   - department: string (required, max 100 chars)
+    //
+    // Collection: sessions
+    // Fields:
+    //   - id: string (required)
+    //   - courseId: string (required, references courses)
+    //   - lecturerId: string (required, references users)
+    //   - startTime: string (required, ISO 8601)
+    //   - endTime: string (required, ISO 8601)
+    //   - venue: string (required, max 100 chars)
+    //   - location: map (required, {lat: number, lng: number})
+    //   - qrCode: string (required)
+    //   - expiresAt: string (required, ISO 8601)
+    //
+    // Collection: attendance
+    // Fields:
+    //   - id: string (required)
+    //   - sessionId: string (required, references sessions)
+    //   - studentId: string (required, references users)
+    //   - courseId: string (required, references courses)
+    //   - timestamp: string (required, ISO 8601)
+    //   - status: string (required, enum: present, late, override)
+    //   - location: map (required, {lat: number, lng: number})
+    //   - overriddenBy: string (optional, max 100 chars)
+    //
+    // Collection: logs
+    // Fields:
+    //   - id: string (required)
+    //   - action: string (required)
+    //   - userId: string (required)
+    //   - userName: string (optional)
+    //   - details: any (optional)
+    //   - timestamp: string (required, ISO 8601)
+    //
+    // Collection: notifications
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required, references users)
+    //   - title: string (required, max 100 chars)
+    //   - message: string (required, max 500 chars)
+    //   - type: string (required, enum: success, warning, info, error)
+    //   - read: bool (required)
+    //   - timestamp: string (required, ISO 8601)
+    //   - link: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          request.auth.token.email == "faith123ekong@gmail.com");
+    }
+
+    function isLecturer() {
+      return isAuthenticated() && 
+        (isAdmin() || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'lecturer'
+        ));
+    }
+
+    function isStudent() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student';
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'role', 'regNumber', 'department', 'courses', 'phoneNumber', 'deviceId', 'deviceAllowed']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+        isValidEmail(data.email) &&
+        data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100 &&
+        data.role in ['admin', 'lecturer', 'student'] &&
+        (!('regNumber' in data) || (data.regNumber is string && data.regNumber.size() <= 50)) &&
+        (!('department' in data) || (data.department is string && data.department.size() <= 100)) &&
+        (!('courses' in data) || (data.courses is list && data.courses.size() <= 50)) &&
+        (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 20)) &&
+        (!('deviceId' in data) || (data.deviceId is string && data.deviceId.size() <= 128)) &&
+        (!('deviceAllowed' in data) || (data.deviceAllowed is bool));
+    }
+
+    function isValidCourse(data) {
+      return hasOnlyAllowedFields(['id', 'code', 'title', 'lecturerId', 'department']) &&
+        data.id is string &&
+        data.code is string && data.code.size() > 0 && data.code.size() <= 20 &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+        data.lecturerId is string &&
+        data.department is string && data.department.size() > 0 && data.department.size() <= 100;
+    }
+
+    function isValidSession(data) {
+      return hasOnlyAllowedFields(['id', 'courseId', 'lecturerId', 'startTime', 'endTime', 'durationHours', 'venue', 'location', 'qrCode', 'expiresAt']) &&
+        data.id is string &&
+        data.courseId is string &&
+        data.lecturerId is string &&
+        isValidDateString(data.startTime) &&
+        isValidDateString(data.endTime) &&
+        data.durationHours is number &&
+        data.venue is string && data.venue.size() > 0 && data.venue.size() <= 100 &&
+        (data.location == null || (data.location is map && data.location.lat is number && data.location.lng is number)) &&
+        data.qrCode is string &&
+        isValidDateString(data.expiresAt);
+    }
+
+    function isValidAttendance(data) {
+      return hasOnlyAllowedFields(['id', 'sessionId', 'studentId', 'courseId', 'lecturerId', 'timestamp', 'status', 'location', 'studentName', 'regNumber', 'department', 'overriddenBy', 'deviceId', 'syncedAt']) &&
+        data.id is string &&
+        data.sessionId is string &&
+        data.studentId is string &&
+        data.courseId is string &&
+        (!('lecturerId' in data) || data.lecturerId is string) &&
+        isValidDateString(data.timestamp) &&
+        data.status in ['present', 'late', 'override', 'absent'] &&
+        (data.location == null || (data.location is map && data.location.lat is number && data.location.lng is number)) &&
+        data.studentName is string && data.studentName.size() <= 100 &&
+        data.regNumber is string && data.regNumber.size() <= 50 &&
+        (!('department' in data) || (data.department is string && data.department.size() <= 100)) &&
+        (!('overriddenBy' in data) || (data.overriddenBy is string && data.overriddenBy.size() <= 100));
+    }
+
+    function isValidLog(data) {
+      return hasOnlyAllowedFields(['id', 'action', 'userId', 'userName', 'details', 'timestamp', 'sessionId', 'courseId', 'lecturerId']) &&
+        data.id is string &&
+        data.action is string &&
+        data.userId is string &&
+        (!('userName' in data) || (data.userName is string && data.userName.size() <= 100)) &&
+        (!('lecturerId' in data) || data.lecturerId is string) &&
+        isValidDateString(data.timestamp);
+    }
+
+    function isValidNotification(data) {
+      return hasOnlyAllowedFields(['userId', 'title', 'message', 'type', 'read', 'timestamp', 'link']) &&
+        data.userId is string &&
+        data.title is string && data.title.size() <= 100 &&
+        data.message is string && data.message.size() <= 500 &&
+        data.type in ['success', 'warning', 'info', 'error'] &&
+        data.read is bool &&
+        isValidDateString(data.timestamp) &&
+        (!('link' in data) || (data.link is string && data.link.size() <= 100));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin() || (isLecturer() && resource.data.role in ['student', 'class_rep']);
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isAuthenticated() && (
+        (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) || 
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /courses/{courseId} {
+      allow read: if isAuthenticated();
+      allow create: if (isAdmin() || isLecturer()) && isValidCourse(request.resource.data);
+      allow update: if (isAdmin() || (isLecturer() && resource.data.lecturerId == request.auth.uid)) && isValidCourse(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create: if (isAdmin() || isLecturer()) && isValidSession(request.resource.data);
+      allow update: if (isAdmin() || (isLecturer() && resource.data.lecturerId == request.auth.uid)) && isValidSession(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.studentId) || 
+        isAdmin() || 
+        (isLecturer() && resource.data.lecturerId == request.auth.uid)
+      );
+      allow create: if isAuthenticated() && (isOwner(request.resource.data.studentId) || isAdmin() || isLecturer()) && isValidAttendance(request.resource.data);
+      allow update: if isAdmin() || (isLecturer() && resource.data.lecturerId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /logs/{logId} {
+      allow read: if isAdmin() || (isLecturer() && resource.data.lecturerId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidLog(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidNotification(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /feedback/{feedbackId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+  }
+}

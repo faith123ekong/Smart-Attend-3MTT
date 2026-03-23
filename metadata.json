@@ -1,0 +1,8 @@
+{
+  "name": "Attendance Tracker | 3MTT",
+  "description": "A secure attendance management system",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

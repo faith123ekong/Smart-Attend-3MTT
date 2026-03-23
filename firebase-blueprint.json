@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information and role.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "lecturer", "student", "class_rep"] },
+        "regNumber": { "type": "string" },
+        "department": { "type": "string" },
+        "courses": { "type": "array", "items": { "type": "string" } },
+        "phoneNumber": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "deviceAllowed": { "type": "boolean" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "University course details.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "lecturerId": { "type": "string" },
+        "department": { "type": "string" },
+        "minAttendance": { "type": "number" },
+        "classRepId": { "type": "string" },
+        "classRepCanOverride": { "type": "boolean" }
+      },
+      "required": ["code", "title", "lecturerId"]
+    },
+    "Session": {
+      "title": "Session",
+      "description": "A specific class session for a course.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "lecturerId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "durationHours": { "type": "number" },
+        "venue": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "qrCode": { "type": "string" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["courseId", "lecturerId", "startTime", "endTime", "location"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Attendance record for a student in a session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["present", "late", "override", "absent"] },
+        "overriddenBy": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        }
+      },
+      "required": ["sessionId", "studentId", "courseId", "timestamp"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User experience feedback.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "role": { "type": "string" },
+        "rating": { "type": "string", "enum": ["Very easy", "Easy", "Moderate", "Difficult", "Very difficult"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "date": { "type": "string" },
+        "time": { "type": "string" }
+      },
+      "required": ["userId", "rating", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/courses/{courseId}": { "schema": "Course", "description": "Courses" },
+    "/sessions/{sessionId}": { "schema": "Session", "description": "Class sessions" },
+    "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Attendance records" },
+    "/logs/{logId}": { "schema": "Log", "description": "System logs" },
+    "/feedback/{feedbackId}": { "schema": "Feedback", "description": "User feedback" }
+  },
+  "entities": {
+    "Log": {
+      "title": "Log",
+      "description": "System activity logs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "details", "timestamp"]
+    }
+  }
+}

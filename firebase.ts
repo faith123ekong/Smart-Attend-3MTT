@@ -1,0 +1,15 @@
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA4mRr_K4DLeKwwhPULGIAUagMUeLe1Npc",
+  authDomain: "ai-studio-applet-webapp-4c980.firebaseapp.com",
+  projectId: "ai-studio-applet-webapp-4c980",
+  appId: "1:972671343191:web:6b03e235da4304708b2112"
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const googleProvider = new GoogleAuthProvider();
