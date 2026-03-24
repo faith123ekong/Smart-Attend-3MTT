@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA4mRr_K4DLeKwwhPULGIAUagMUeLe1Npc",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "ai-studio-applet-webapp-4c980.firebaseapp.com",
   projectId: "ai-studio-applet-webapp-4c980",
   storageBucket: "ai-studio-applet-webapp-4c980.firebasestorage.app", // Added
